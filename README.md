@@ -1,6 +1,6 @@
 # three.map.control
 
-A three.js camera that mimics 2d maps navigation with pan and zoom.
+Mobile friendly three.js camera that mimics 2d maps navigation with pan and zoom.
 
 [DEMO](https://anvaka.github.io/three.map.control/demo/)
 

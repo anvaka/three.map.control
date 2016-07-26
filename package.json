@@ -1,7 +1,7 @@
 {
   "name": "three.map.control",
   "version": "1.0.0",
-  "description": "A three.js camera that mimics 2d maps navigation with pan and zoom",
+  "description": "Mobile friendly three.js camera that mimics 2d maps navigation with pan and zoom",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
