@@ -37,7 +37,9 @@ function panzoom(camera, owner) {
 
   var api = eventify({
     dispose: dispose,
-    speed: 0.03
+    speed: 0.03,
+    min: 0.0001,
+    max: Number.POSITIVE_INFINITY
   })
 
   owner.addEventListener('mousedown', handleMouseDown)
@@ -229,7 +231,12 @@ function panzoom(camera, owner) {
     var dx = (clientX - owner.clientWidth / 2) / currentScale
     var dy = (clientY - owner.clientHeight / 2) / currentScale
 
-    camera.position.z *= scaleMultiplier
+    var newZ = camera.position.z * scaleMultiplier
+    if (newZ < api.min || newZ > api.max) {
+      return
+    }
+
+    camera.position.z = newZ
     camera.position.x -= (scaleMultiplier - 1) * dx
     camera.position.y += (scaleMultiplier - 1) * dy
 
