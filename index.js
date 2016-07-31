@@ -247,11 +247,12 @@ function panzoom(camera, owner) {
 
   function getScaleMultiplier(delta) {
     var scaleMultiplier = 1
-    if (delta < 0) { // zoom out
-      scaleMultiplier = (1 - api.speed)
-    } else if (delta > 0) { // zoom in
-      scaleMultiplier = (1 + api.speed)
+    if (delta > 10) {
+      delta = 10;
+    } else if (delta < -10) {
+      delta = -10;
     }
+    scaleMultiplier = (1 + api.speed * delta)
 
     return scaleMultiplier
   }
