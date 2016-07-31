@@ -1,6 +1,6 @@
 {
   "name": "three.map.control",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Mobile friendly three.js camera that mimics 2d maps navigation with pan and zoom",
   "main": "index.js",
   "scripts": {
