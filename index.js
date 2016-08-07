@@ -48,14 +48,8 @@ function panzoom(camera, owner) {
   return api;
 
   function onTouch(e) {
-    if (e.touches.length === 1) {
-      return handleSignleFingerTouch(e, e.touches[0])
-    } else if (e.touches.length === 2) {
-      // handleTouchMove() will care about pinch zoom.
-      e.stopPropagation()
-      e.preventDefault()
-
-      pinchZoomLength = getPinchZoomLength(e.touches[1], e.touches[1])
+    if (e.touches.length < 2) {
+      handleTouch(e)
     }
   }
 
@@ -64,7 +58,7 @@ function panzoom(camera, owner) {
       (finger1.clientY - finger2.clientY) * (finger1.clientY - finger2.clientY)
   }
 
-  function handleSignleFingerTouch(e) {
+  function handleTouch(e) {
     e.stopPropagation()
     e.preventDefault()
 
