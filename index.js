@@ -23,7 +23,8 @@ function panzoom(camera, owner) {
   var isDragging = false
   var panstartFired = false
   var touchInProgress = false
-  var lastTouchTime = new Date(0);
+  var lastTouchTime = new Date(0)
+  var smoothZoomAnimation, smoothPanAnimation;
 
   var lastPinchZoomLength
 
@@ -33,6 +34,7 @@ function panzoom(camera, owner) {
   }
 
   owner = owner || document.body;
+  owner.setAttribute('tabindex', 1); // TODO: not sure if this is really polite
 
   var smoothScroll = kinetic(getCameraPosition, {
      scrollCallback: onSmoothScroll
@@ -49,6 +51,7 @@ function panzoom(camera, owner) {
 
   owner.addEventListener('mousedown', handleMouseDown)
   owner.addEventListener('touchstart', onTouch)
+  owner.addEventListener('keydown', onKeyDown)
 
   return api;
 
@@ -63,6 +66,33 @@ function panzoom(camera, owner) {
       handleDoubleTap(e);
     } else if (touchesCount < 3) {
       handleTouch(e)
+    }
+  }
+
+  function onKeyDown(e) {
+    var x = 0, y = 0, z = 0
+    if (e.keyCode === 38) {
+      y = 1 // up
+    } else if (e.keyCode === 40) {
+      y = -1 // down
+    } else if (e.keyCode === 37) {
+      x = 1 // left
+    } else if (e.keyCode === 39) {
+      x = -1 // right
+    } else if (e.keyCode === 189) {
+      z = 1 // zoom out
+    } else if (e.keyCode === 187) {
+      z = -1 // zoom out
+    }
+
+    if (x || y) {
+      e.preventDefault()
+      e.stopPropagation()
+      smoothPanByOffset(5 * x, 5 * y)
+    }
+
+    if (z) {
+      smoothZoom(owner.clientWidth/2, owner.clientHeight/2, z)
     }
   }
 
@@ -93,16 +123,37 @@ function panzoom(camera, owner) {
 
     smoothScroll.cancel();
 
-    var from = { delta: 1 }
-    var to = { delta: 2 }
+    smoothZoom(tap.clientX, tap.clientY, -1);
+  }
 
-    // This will animate from.x from 0 to 42 in 400ms, using cubic bezier easing
-    // function (same effect as default CSS `ease` function)
-    animate(from, to, {
+  function smoothPanByOffset(x, y) {
+    if (smoothPanAnimation) {
+      smoothPanAnimation.cancel();
+    }
+
+    var from = { x: x, y: y }
+    var to = { x: 2 * x, y: 2 * y }
+    smoothPanAnimation = animate(from, to, {
+      easing: 'linear',
       duration: 200,
       step: function(d) {
-        var scaleMultiplier = getScaleMultiplier(-d.delta);
-        zoomTo(tap.clientX, tap.clientY, scaleMultiplier)
+        panByOffset(d.x, d.y)
+      }
+    })
+  }
+
+  function smoothZoom(x, y, scale) {
+    var from = { delta: scale }
+    var to = { delta: scale * 2 }
+    if (smoothZoomAnimation) {
+      smoothZoomAnimation.cancel();
+    }
+
+    smoothZoomAnimation = animate(from, to, {
+      duration: 200,
+      step: function(d) {
+        var scaleMultiplier = getScaleMultiplier(d.delta);
+        zoomTo(x, y, scaleMultiplier)
       }
     })
   }
@@ -232,6 +283,10 @@ function panzoom(camera, owner) {
   function disposeWindowEvents() {
     window.removeEventListener('mouseup', handleMouseUp, true)
     window.removeEventListener('mousemove', handleMouseMove, true)
+
+    owner.removeEventListener('mousedown', handleMouseDown)
+    owner.removeEventListener('touchstart', onTouch)
+    owner.removeEventListener('keydown', onKeyDown)
   }
 
   function dispose() {
