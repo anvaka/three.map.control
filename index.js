@@ -283,10 +283,6 @@ function panzoom(camera, owner) {
   function disposeWindowEvents() {
     window.removeEventListener('mouseup', handleMouseUp, true)
     window.removeEventListener('mousemove', handleMouseMove, true)
-
-    owner.removeEventListener('mousedown', handleMouseDown)
-    owner.removeEventListener('touchstart', onTouch)
-    owner.removeEventListener('keydown', onKeyDown)
   }
 
   function dispose() {
@@ -296,6 +292,10 @@ function panzoom(camera, owner) {
 
     smoothScroll.cancel()
     triggerPanEnd()
+
+    owner.removeEventListener('mousedown', handleMouseDown)
+    owner.removeEventListener('touchstart', onTouch)
+    owner.removeEventListener('keydown', onKeyDown)
   }
 
   function panByOffset(dx, dy) {
