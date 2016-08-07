@@ -28,6 +28,7 @@
     "wheel": "0.0.4"
   },
   "devDependencies": {
+    "amator": "^1.0.1",
     "three": "^0.79.0"
   }
 }

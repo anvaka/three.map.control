@@ -1,6 +1,7 @@
 var wheel = require('wheel')
 var eventify = require('ngraph.events')
 var kinetic = require('./lib/kinetic.js')
+var animate = require('amator');
 
 module.exports = panzoom
 
@@ -22,8 +23,9 @@ function panzoom(camera, owner) {
   var isDragging = false
   var panstartFired = false
   var touchInProgress = false
+  var lastTouchTime = new Date(0);
 
-  var pinchZoomLength
+  var lastPinchZoomLength
 
   var mousePos = {
     x: 0,
@@ -32,7 +34,10 @@ function panzoom(camera, owner) {
 
   owner = owner || document.body;
 
-  var smoothScroll = kinetic(getCameraPosition, onSmoothScroll)
+  var smoothScroll = kinetic(getCameraPosition, {
+     scrollCallback: onSmoothScroll
+  })
+
   wheel.addWheelListener(owner, onMouseWheel)
 
   var api = eventify({
@@ -48,7 +53,15 @@ function panzoom(camera, owner) {
   return api;
 
   function onTouch(e) {
-    if (e.touches.length < 2) {
+    var touchTime = new Date();
+    var timeBetweenTaps = touchTime - lastTouchTime;
+    lastTouchTime = touchTime;
+
+    var touchesCount = e.touches.length;
+
+    if (timeBetweenTaps < 400 && touchesCount === 1) {
+      handleDoubleTap(e);
+    } else if (touchesCount < 3) {
       handleTouch(e)
     }
   }
@@ -72,6 +85,28 @@ function panzoom(camera, owner) {
     }
   }
 
+  function handleDoubleTap(e) {
+    e.stopPropagation()
+    e.preventDefault()
+
+    var tap = e.touches[0];
+
+    smoothScroll.cancel();
+
+    var from = { delta: 1 }
+    var to = { delta: 2 }
+
+    // This will animate from.x from 0 to 42 in 400ms, using cubic bezier easing
+    // function (same effect as default CSS `ease` function)
+    animate(from, to, {
+      duration: 200,
+      step: function(d) {
+        var scaleMultiplier = getScaleMultiplier(-d.delta);
+        zoomTo(tap.clientX, tap.clientY, scaleMultiplier)
+      }
+    })
+  }
+
   function handleTouchMove(e) {
     triggerPanStart()
 
@@ -92,24 +127,30 @@ function panzoom(camera, owner) {
       var currentPinchLength = getPinchZoomLength(t1, t2)
 
       var delta = 0
-      if (currentPinchLength < pinchZoomLength) {
+      if (currentPinchLength < lastPinchZoomLength) {
         delta = 1
-      } else if (currentPinchLength > pinchZoomLength) {
+      } else if (currentPinchLength > lastPinchZoomLength) {
         delta = -1
       }
 
       var scaleMultiplier = getScaleMultiplier(delta)
 
-      mousePos.x = (t1.clientX + t2.clientX)/2
-      mousePos.y = (t1.clientY + t2.clientY)/2
+      setMousePosFromTwoTouches(e);
 
       zoomTo(mousePos.x, mousePos.y, scaleMultiplier)
 
-      pinchZoomLength = currentPinchLength
+      lastPinchZoomLength = currentPinchLength
 
       e.stopPropagation()
       e.preventDefault()
     }
+  }
+
+  function setMousePosFromTwoTouches(e) {
+    var t1 = e.touches[0]
+    var t2 = e.touches[1]
+    mousePos.x = (t1.clientX + t2.clientX)/2
+    mousePos.y = (t1.clientY + t2.clientY)/2
   }
 
   function handleTouchEnd(e) {
@@ -212,10 +253,10 @@ function panzoom(camera, owner) {
   }
 
   function onMouseWheel(e) {
-    smoothScroll.cancel()
 
     var scaleMultiplier = getScaleMultiplier(e.deltaY)
 
+    smoothScroll.cancel()
     zoomTo(e.clientX, e.clientY, scaleMultiplier)
   }
 
