@@ -7,6 +7,9 @@ camera.position.z = 4;
 // This is how to use three.map.control:
 var createPanZoom = require('../');
 var panZoom = createPanZoom(camera, container);
+// For convenience - move focus to the container:
+container.focus();
+
 // That's it! Now you should be able to use mouse left button (or a single tap) to pan around
 // Use mouse wheel to zoom in/out (or two fingers pinch)
 //

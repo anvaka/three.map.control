@@ -1,6 +1,7 @@
 var wheel = require('wheel')
 var eventify = require('ngraph.events')
 var kinetic = require('./lib/kinetic.js')
+var animate = require('amator');
 
 module.exports = panzoom
 
@@ -22,8 +23,10 @@ function panzoom(camera, owner) {
   var isDragging = false
   var panstartFired = false
   var touchInProgress = false
+  var lastTouchTime = new Date(0)
+  var smoothZoomAnimation, smoothPanAnimation;
 
-  var pinchZoomLength
+  var lastPinchZoomLength
 
   var mousePos = {
     x: 0,
@@ -31,29 +34,66 @@ function panzoom(camera, owner) {
   }
 
   owner = owner || document.body;
+  owner.setAttribute('tabindex', 1); // TODO: not sure if this is really polite
 
-  var smoothScroll = kinetic(getCameraPosition, onSmoothScroll)
+  var smoothScroll = kinetic(getCameraPosition, {
+     scrollCallback: onSmoothScroll
+  })
+
   wheel.addWheelListener(owner, onMouseWheel)
 
   var api = eventify({
     dispose: dispose,
-    speed: 0.03
+    speed: 0.03,
+    min: 0.0001,
+    max: Number.POSITIVE_INFINITY
   })
 
   owner.addEventListener('mousedown', handleMouseDown)
   owner.addEventListener('touchstart', onTouch)
+  owner.addEventListener('keydown', onKeyDown)
 
   return api;
 
   function onTouch(e) {
-    if (e.touches.length === 1) {
-      return handleSignleFingerTouch(e, e.touches[0])
-    } else if (e.touches.length === 2) {
-      // handleTouchMove() will care about pinch zoom.
-      e.stopPropagation()
-      e.preventDefault()
+    var touchTime = new Date();
+    var timeBetweenTaps = touchTime - lastTouchTime;
+    lastTouchTime = touchTime;
 
-      pinchZoomLength = getPinchZoomLength(e.touches[1], e.touches[1])
+    var touchesCount = e.touches.length;
+
+    if (timeBetweenTaps < 400 && touchesCount === 1) {
+      handleDoubleTap(e);
+    } else if (touchesCount < 3) {
+      handleTouch(e)
+    }
+  }
+
+  function onKeyDown(e) {
+    var x = 0, y = 0, z = 0
+    if (e.keyCode === 38) {
+      y = 1 // up
+    } else if (e.keyCode === 40) {
+      y = -1 // down
+    } else if (e.keyCode === 37) {
+      x = 1 // left
+    } else if (e.keyCode === 39) {
+      x = -1 // right
+    } else if (e.keyCode === 189) {
+      z = 1 // `-` -  zoom out
+    } else if (e.keyCode === 187) {
+      z = -1 // `=` - zoom in (equal sign on US layout is under `+`)
+    }
+    // TODO: Keypad keycodes are missing.
+
+    if (x || y) {
+      e.preventDefault()
+      e.stopPropagation()
+      smoothPanByOffset(5 * x, 5 * y)
+    }
+
+    if (z) {
+      smoothZoom(owner.clientWidth/2, owner.clientHeight/2, z)
     }
   }
 
@@ -62,7 +102,7 @@ function panzoom(camera, owner) {
       (finger1.clientY - finger2.clientY) * (finger1.clientY - finger2.clientY)
   }
 
-  function handleSignleFingerTouch(e) {
+  function handleTouch(e) {
     e.stopPropagation()
     e.preventDefault()
 
@@ -74,6 +114,49 @@ function panzoom(camera, owner) {
       window.addEventListener('touchend', handleTouchEnd)
       window.addEventListener('touchcancel', handleTouchEnd)
     }
+  }
+
+  function handleDoubleTap(e) {
+    e.stopPropagation()
+    e.preventDefault()
+
+    var tap = e.touches[0];
+
+    smoothScroll.cancel();
+
+    smoothZoom(tap.clientX, tap.clientY, -1);
+  }
+
+  function smoothPanByOffset(x, y) {
+    if (smoothPanAnimation) {
+      smoothPanAnimation.cancel();
+    }
+
+    var from = { x: x, y: y }
+    var to = { x: 2 * x, y: 2 * y }
+    smoothPanAnimation = animate(from, to, {
+      easing: 'linear',
+      duration: 200,
+      step: function(d) {
+        panByOffset(d.x, d.y)
+      }
+    })
+  }
+
+  function smoothZoom(x, y, scale) {
+    var from = { delta: scale }
+    var to = { delta: scale * 2 }
+    if (smoothZoomAnimation) {
+      smoothZoomAnimation.cancel();
+    }
+
+    smoothZoomAnimation = animate(from, to, {
+      duration: 200,
+      step: function(d) {
+        var scaleMultiplier = getScaleMultiplier(d.delta);
+        zoomTo(x, y, scaleMultiplier)
+      }
+    })
   }
 
   function handleTouchMove(e) {
@@ -96,24 +179,30 @@ function panzoom(camera, owner) {
       var currentPinchLength = getPinchZoomLength(t1, t2)
 
       var delta = 0
-      if (currentPinchLength < pinchZoomLength) {
+      if (currentPinchLength < lastPinchZoomLength) {
         delta = 1
-      } else if (currentPinchLength > pinchZoomLength) {
+      } else if (currentPinchLength > lastPinchZoomLength) {
         delta = -1
       }
 
       var scaleMultiplier = getScaleMultiplier(delta)
 
-      mousePos.x = (t1.clientX + t2.clientX)/2
-      mousePos.y = (t1.clientY + t2.clientY)/2
+      setMousePosFromTwoTouches(e);
 
       zoomTo(mousePos.x, mousePos.y, scaleMultiplier)
 
-      pinchZoomLength = currentPinchLength
+      lastPinchZoomLength = currentPinchLength
 
       e.stopPropagation()
       e.preventDefault()
     }
+  }
+
+  function setMousePosFromTwoTouches(e) {
+    var t1 = e.touches[0]
+    var t2 = e.touches[1]
+    mousePos.x = (t1.clientX + t2.clientX)/2
+    mousePos.y = (t1.clientY + t2.clientY)/2
   }
 
   function handleTouchEnd(e) {
@@ -204,6 +293,10 @@ function panzoom(camera, owner) {
 
     smoothScroll.cancel()
     triggerPanEnd()
+
+    owner.removeEventListener('mousedown', handleMouseDown)
+    owner.removeEventListener('touchstart', onTouch)
+    owner.removeEventListener('keydown', onKeyDown)
   }
 
   function panByOffset(dx, dy) {
@@ -216,10 +309,10 @@ function panzoom(camera, owner) {
   }
 
   function onMouseWheel(e) {
-    smoothScroll.cancel()
 
     var scaleMultiplier = getScaleMultiplier(e.deltaY)
 
+    smoothScroll.cancel()
     zoomTo(e.clientX, e.clientY, scaleMultiplier)
   }
 
@@ -229,7 +322,12 @@ function panzoom(camera, owner) {
     var dx = (clientX - owner.clientWidth / 2) / currentScale
     var dy = (clientY - owner.clientHeight / 2) / currentScale
 
-    camera.position.z *= scaleMultiplier
+    var newZ = camera.position.z * scaleMultiplier
+    if (newZ < api.min || newZ > api.max) {
+      return
+    }
+
+    camera.position.z = newZ
     camera.position.x -= (scaleMultiplier - 1) * dx
     camera.position.y += (scaleMultiplier - 1) * dy
 
@@ -247,11 +345,12 @@ function panzoom(camera, owner) {
 
   function getScaleMultiplier(delta) {
     var scaleMultiplier = 1
-    if (delta < 0) { // zoom out
-      scaleMultiplier = (1 - api.speed)
-    } else if (delta > 0) { // zoom in
-      scaleMultiplier = (1 + api.speed)
+    if (delta > 10) {
+      delta = 10;
+    } else if (delta < -10) {
+      delta = -10;
     }
+    scaleMultiplier = (1 + api.speed * delta)
 
     return scaleMultiplier
   }

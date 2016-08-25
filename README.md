@@ -1,14 +1,21 @@
 # three.map.control
 
-A three.js camera that mimics 2d maps navigation with pan and zoom
+Mobile friendly three.js camera that mimics 2d maps navigation with pan and zoom.
+
+[DEMO](https://anvaka.github.io/three.map.control/demo/)
 
 ## Features
 
 * **Touch friendly**. Drag scene around with single finger touch, or zoom it with standard
-pinch gesture
+pinch gesture.
+
+![touch friendly](https://i.imgur.com/CL3inbB.gif)
+
 * **Zoom into point**. Use your mouse wheel to zoom into particular point on the scene.
 * **Easing**. When you pan around, the movement does not stop immediately. Smooth
 kinetic panning gives natural feel to it.
+
+![easing](https://i.imgur.com/PSbGYp1.gif)
 * **Tiny**. It's less than `400` lines of documented code.
 
 # usage
@@ -25,6 +32,9 @@ var panZoom = createPanZoom(camera, container);
 
 // That's it. panZoom wil now listen to events from `container`. You can pan and
 // zoom with your mouse or fingers (on touch device)
+
+// If you want to dispose three.js scene, make sure to call:
+panZoom.dispose();
 ```
 
 # license

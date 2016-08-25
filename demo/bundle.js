@@ -8,6 +8,9 @@ camera.position.z = 4;
 // This is how to use three.map.control:
 var createPanZoom = require('../');
 var panZoom = createPanZoom(camera, container);
+// For convenience - move focus to the container:
+container.focus();
+
 // That's it! Now you should be able to use mouse left button (or a single tap) to pan around
 // Use mouse wheel to zoom in/out (or two fingers pinch)
 //
@@ -112,10 +115,11 @@ function render() {
 }
 
 
-},{"../":2,"three":5}],2:[function(require,module,exports){
+},{"../":2,"three":7}],2:[function(require,module,exports){
 var wheel = require('wheel')
 var eventify = require('ngraph.events')
 var kinetic = require('./lib/kinetic.js')
+var animate = require('amator');
 
 module.exports = panzoom
 
@@ -137,8 +141,10 @@ function panzoom(camera, owner) {
   var isDragging = false
   var panstartFired = false
   var touchInProgress = false
+  var lastTouchTime = new Date(0)
+  var smoothZoomAnimation, smoothPanAnimation;
 
-  var pinchZoomLength
+  var lastPinchZoomLength
 
   var mousePos = {
     x: 0,
@@ -146,29 +152,66 @@ function panzoom(camera, owner) {
   }
 
   owner = owner || document.body;
+  owner.setAttribute('tabindex', 1); // TODO: not sure if this is really polite
 
-  var smoothScroll = kinetic(getCameraPosition, onSmoothScroll)
+  var smoothScroll = kinetic(getCameraPosition, {
+     scrollCallback: onSmoothScroll
+  })
+
   wheel.addWheelListener(owner, onMouseWheel)
 
   var api = eventify({
     dispose: dispose,
-    speed: 0.03
+    speed: 0.03,
+    min: 0.0001,
+    max: Number.POSITIVE_INFINITY
   })
 
   owner.addEventListener('mousedown', handleMouseDown)
   owner.addEventListener('touchstart', onTouch)
+  owner.addEventListener('keydown', onKeyDown)
 
   return api;
 
   function onTouch(e) {
-    if (e.touches.length === 1) {
-      return handleSignleFingerTouch(e, e.touches[0])
-    } else if (e.touches.length === 2) {
-      // handleTouchMove() will care about pinch zoom.
-      e.stopPropagation()
-      e.preventDefault()
+    var touchTime = new Date();
+    var timeBetweenTaps = touchTime - lastTouchTime;
+    lastTouchTime = touchTime;
 
-      pinchZoomLength = getPinchZoomLength(e.touches[1], e.touches[1])
+    var touchesCount = e.touches.length;
+
+    if (timeBetweenTaps < 400 && touchesCount === 1) {
+      handleDoubleTap(e);
+    } else if (touchesCount < 3) {
+      handleTouch(e)
+    }
+  }
+
+  function onKeyDown(e) {
+    var x = 0, y = 0, z = 0
+    if (e.keyCode === 38) {
+      y = 1 // up
+    } else if (e.keyCode === 40) {
+      y = -1 // down
+    } else if (e.keyCode === 37) {
+      x = 1 // left
+    } else if (e.keyCode === 39) {
+      x = -1 // right
+    } else if (e.keyCode === 189) {
+      z = 1 // `-` -  zoom out
+    } else if (e.keyCode === 187) {
+      z = -1 // `=` - zoom in (equal sign on US layout is under `+`)
+    }
+    // TODO: Keypad keycodes are missing.
+
+    if (x || y) {
+      e.preventDefault()
+      e.stopPropagation()
+      smoothPanByOffset(5 * x, 5 * y)
+    }
+
+    if (z) {
+      smoothZoom(owner.clientWidth/2, owner.clientHeight/2, z)
     }
   }
 
@@ -177,7 +220,7 @@ function panzoom(camera, owner) {
       (finger1.clientY - finger2.clientY) * (finger1.clientY - finger2.clientY)
   }
 
-  function handleSignleFingerTouch(e) {
+  function handleTouch(e) {
     e.stopPropagation()
     e.preventDefault()
 
@@ -189,6 +232,49 @@ function panzoom(camera, owner) {
       window.addEventListener('touchend', handleTouchEnd)
       window.addEventListener('touchcancel', handleTouchEnd)
     }
+  }
+
+  function handleDoubleTap(e) {
+    e.stopPropagation()
+    e.preventDefault()
+
+    var tap = e.touches[0];
+
+    smoothScroll.cancel();
+
+    smoothZoom(tap.clientX, tap.clientY, -1);
+  }
+
+  function smoothPanByOffset(x, y) {
+    if (smoothPanAnimation) {
+      smoothPanAnimation.cancel();
+    }
+
+    var from = { x: x, y: y }
+    var to = { x: 2 * x, y: 2 * y }
+    smoothPanAnimation = animate(from, to, {
+      easing: 'linear',
+      duration: 200,
+      step: function(d) {
+        panByOffset(d.x, d.y)
+      }
+    })
+  }
+
+  function smoothZoom(x, y, scale) {
+    var from = { delta: scale }
+    var to = { delta: scale * 2 }
+    if (smoothZoomAnimation) {
+      smoothZoomAnimation.cancel();
+    }
+
+    smoothZoomAnimation = animate(from, to, {
+      duration: 200,
+      step: function(d) {
+        var scaleMultiplier = getScaleMultiplier(d.delta);
+        zoomTo(x, y, scaleMultiplier)
+      }
+    })
   }
 
   function handleTouchMove(e) {
@@ -211,24 +297,30 @@ function panzoom(camera, owner) {
       var currentPinchLength = getPinchZoomLength(t1, t2)
 
       var delta = 0
-      if (currentPinchLength < pinchZoomLength) {
+      if (currentPinchLength < lastPinchZoomLength) {
         delta = 1
-      } else if (currentPinchLength > pinchZoomLength) {
+      } else if (currentPinchLength > lastPinchZoomLength) {
         delta = -1
       }
 
       var scaleMultiplier = getScaleMultiplier(delta)
 
-      mousePos.x = (t1.clientX + t2.clientX)/2
-      mousePos.y = (t1.clientY + t2.clientY)/2
+      setMousePosFromTwoTouches(e);
 
       zoomTo(mousePos.x, mousePos.y, scaleMultiplier)
 
-      pinchZoomLength = currentPinchLength
+      lastPinchZoomLength = currentPinchLength
 
       e.stopPropagation()
       e.preventDefault()
     }
+  }
+
+  function setMousePosFromTwoTouches(e) {
+    var t1 = e.touches[0]
+    var t2 = e.touches[1]
+    mousePos.x = (t1.clientX + t2.clientX)/2
+    mousePos.y = (t1.clientY + t2.clientY)/2
   }
 
   function handleTouchEnd(e) {
@@ -319,6 +411,10 @@ function panzoom(camera, owner) {
 
     smoothScroll.cancel()
     triggerPanEnd()
+
+    owner.removeEventListener('mousedown', handleMouseDown)
+    owner.removeEventListener('touchstart', onTouch)
+    owner.removeEventListener('keydown', onKeyDown)
   }
 
   function panByOffset(dx, dy) {
@@ -331,10 +427,10 @@ function panzoom(camera, owner) {
   }
 
   function onMouseWheel(e) {
-    smoothScroll.cancel()
 
     var scaleMultiplier = getScaleMultiplier(e.deltaY)
 
+    smoothScroll.cancel()
     zoomTo(e.clientX, e.clientY, scaleMultiplier)
   }
 
@@ -344,7 +440,12 @@ function panzoom(camera, owner) {
     var dx = (clientX - owner.clientWidth / 2) / currentScale
     var dy = (clientY - owner.clientHeight / 2) / currentScale
 
-    camera.position.z *= scaleMultiplier
+    var newZ = camera.position.z * scaleMultiplier
+    if (newZ < api.min || newZ > api.max) {
+      return
+    }
+
+    camera.position.z = newZ
     camera.position.x -= (scaleMultiplier - 1) * dx
     camera.position.y += (scaleMultiplier - 1) * dy
 
@@ -362,26 +463,31 @@ function panzoom(camera, owner) {
 
   function getScaleMultiplier(delta) {
     var scaleMultiplier = 1
-    if (delta < 0) { // zoom out
-      scaleMultiplier = (1 - api.speed)
-    } else if (delta > 0) { // zoom in
-      scaleMultiplier = (1 + api.speed)
+    if (delta > 10) {
+      delta = 10;
+    } else if (delta < -10) {
+      delta = -10;
     }
+    scaleMultiplier = (1 + api.speed * delta)
 
     return scaleMultiplier
   }
 }
 
-},{"./lib/kinetic.js":3,"ngraph.events":4,"wheel":6}],3:[function(require,module,exports){
+},{"./lib/kinetic.js":3,"amator":4,"ngraph.events":6,"wheel":8}],3:[function(require,module,exports){
 /**
  * Allows smooth kinetic scrolling of the surface
  */
 module.exports = kinetic;
 
-var minVelocity = 10
-var amplitude = 0.42
+function kinetic(getPointCallback, options) {
+  options = options || {};
 
-function kinetic(getPointCallback, scrollCallback) {
+  var minVelocity = options.minVelocity || 10;
+  var amplitude = options.amplitude || 0.42;
+  var trackerSpeed = options.trackerSpeed || 100;
+  var scrollCallback = options.scrollCallback || noop;
+
   var lastPoint = {x: 0, y: 0}
   var timestamp
   var timeConstant = 342
@@ -395,7 +501,12 @@ function kinetic(getPointCallback, scrollCallback) {
   return {
     start: start,
     stop: stop,
-    cancel: cancel
+    cancel: cancel,
+    isStarted: isStarted
+  }
+
+  function isStarted() {
+    return ticker !== 0;
   }
 
   function cancel() {
@@ -412,10 +523,10 @@ function kinetic(getPointCallback, scrollCallback) {
     window.clearInterval(ticker)
     window.cancelAnimationFrame(raf)
 
-    ticker = window.setInterval(track, 100);
+    ticker = window.setInterval(trackPointMovement, trackerSpeed);
   }
 
-  function track() {
+  function trackPointMovement() {
     var now = Date.now();
     var elapsed = now - timestamp;
     timestamp = now;
@@ -442,6 +553,7 @@ function kinetic(getPointCallback, scrollCallback) {
   function stop() {
     window.clearInterval(ticker);
     window.cancelAnimationFrame(raf)
+    ticker = 0;
 
     var point = getPointCallback()
 
@@ -490,7 +602,223 @@ function kinetic(getPointCallback, scrollCallback) {
   }
 }
 
+function noop() { }
+
 },{}],4:[function(require,module,exports){
+var BezierEasing = require('bezier-easing')
+
+// Predefined set of animations. Similar to CSS easing functions
+var animations = {
+  ease:  BezierEasing(0.25, 0.1, 0.25, 1),
+  easeIn: BezierEasing(0.42, 0, 1, 1),
+  easeOut: BezierEasing(0, 0, 0.58, 1),
+  easeInOut: BezierEasing(0.42, 0, 0.58, 1),
+  linear: BezierEasing(0, 0, 1, 1)
+}
+
+
+module.exports = animate;
+
+function animate(source, target, options) {
+  var start= Object.create(null)
+  var diff = Object.create(null)
+  options = options || {}
+  // We let clients specify their own easing function
+  var easing = (typeof options.easing === 'function') ? options.easing : animations[options.easing]
+
+  // if nothing is specified, default to ease (similar to CSS animations)
+  if (!easing) {
+    if (options.easing) {
+      console.warn('Unknown easing function in amator: ' + options.easing);
+    }
+    easing = animations.ease
+  }
+
+  var step = typeof options.step === 'function' ? options.step : noop
+  var done = typeof options.done === 'function' ? options.done : noop
+
+  var scheduler = getScheduler(options.scheduler)
+
+  var keys = Object.keys(target)
+  keys.forEach(function(key) {
+    start[key] = source[key]
+    diff[key] = target[key] - source[key]
+  })
+
+  var durationInMs = options.duration || 400
+  var durationInFrames = Math.max(1, durationInMs * 0.06) // 0.06 because 60 frames pers 1,000 ms
+  var previousAnimationId
+  var frame = 0
+
+  previousAnimationId = scheduler.next(loop)
+
+  return {
+    cancel: cancel
+  }
+
+  function cancel() {
+    scheduler.cancel(previousAnimationId)
+    previousAnimationId = 0
+  }
+
+  function loop() {
+    var t = easing(frame/durationInFrames)
+    frame += 1
+    setValues(t)
+    if (frame <= durationInFrames) {
+      previousAnimationId = scheduler.next(loop)
+      step(source)
+    } else {
+      previousAnimationId = 0
+      setTimeout(function() { done(source) }, 0)
+    }
+  }
+
+  function setValues(t) {
+    keys.forEach(function(key) {
+      source[key] = diff[key] * t + start[key]
+    })
+  }
+}
+
+function noop() { }
+
+function getScheduler(scheduler) {
+  if (!scheduler) {
+    var canRaf = typeof window !== 'undefined' && window.requestAnimationFrame
+    return canRaf ? rafScheduler() : timeoutScheduler()
+  }
+  if (typeof scheduler.next !== 'function') throw new Error('Scheduler is supposed to have next(cb) function')
+  if (typeof scheduler.cancel !== 'function') throw new Error('Scheduler is supposed to have cancel(handle) function')
+
+  return scheduler
+}
+
+function rafScheduler() {
+  return {
+    next: window.requestAnimationFrame.bind(window),
+    cancel: window.cancelAnimationFrame.bind(window)
+  }
+}
+
+function timeoutScheduler() {
+  return {
+    next: function(cb) {
+      return setTimeout(cb, 1000/60)
+    },
+    cancel: function (id) {
+      return clearTimeout(id)
+    }
+  }
+}
+
+},{"bezier-easing":5}],5:[function(require,module,exports){
+/**
+ * https://github.com/gre/bezier-easing
+ * BezierEasing - use bezier curve for transition easing function
+ * by Gaëtan Renaudeau 2014 - 2015 – MIT License
+ */
+
+// These values are established by empiricism with tests (tradeoff: performance VS precision)
+var NEWTON_ITERATIONS = 4;
+var NEWTON_MIN_SLOPE = 0.001;
+var SUBDIVISION_PRECISION = 0.0000001;
+var SUBDIVISION_MAX_ITERATIONS = 10;
+
+var kSplineTableSize = 11;
+var kSampleStepSize = 1.0 / (kSplineTableSize - 1.0);
+
+var float32ArraySupported = typeof Float32Array === 'function';
+
+function A (aA1, aA2) { return 1.0 - 3.0 * aA2 + 3.0 * aA1; }
+function B (aA1, aA2) { return 3.0 * aA2 - 6.0 * aA1; }
+function C (aA1)      { return 3.0 * aA1; }
+
+// Returns x(t) given t, x1, and x2, or y(t) given t, y1, and y2.
+function calcBezier (aT, aA1, aA2) { return ((A(aA1, aA2) * aT + B(aA1, aA2)) * aT + C(aA1)) * aT; }
+
+// Returns dx/dt given t, x1, and x2, or dy/dt given t, y1, and y2.
+function getSlope (aT, aA1, aA2) { return 3.0 * A(aA1, aA2) * aT * aT + 2.0 * B(aA1, aA2) * aT + C(aA1); }
+
+function binarySubdivide (aX, aA, aB, mX1, mX2) {
+  var currentX, currentT, i = 0;
+  do {
+    currentT = aA + (aB - aA) / 2.0;
+    currentX = calcBezier(currentT, mX1, mX2) - aX;
+    if (currentX > 0.0) {
+      aB = currentT;
+    } else {
+      aA = currentT;
+    }
+  } while (Math.abs(currentX) > SUBDIVISION_PRECISION && ++i < SUBDIVISION_MAX_ITERATIONS);
+  return currentT;
+}
+
+function newtonRaphsonIterate (aX, aGuessT, mX1, mX2) {
+ for (var i = 0; i < NEWTON_ITERATIONS; ++i) {
+   var currentSlope = getSlope(aGuessT, mX1, mX2);
+   if (currentSlope === 0.0) {
+     return aGuessT;
+   }
+   var currentX = calcBezier(aGuessT, mX1, mX2) - aX;
+   aGuessT -= currentX / currentSlope;
+ }
+ return aGuessT;
+}
+
+module.exports = function bezier (mX1, mY1, mX2, mY2) {
+  if (!(0 <= mX1 && mX1 <= 1 && 0 <= mX2 && mX2 <= 1)) {
+    throw new Error('bezier x values must be in [0, 1] range');
+  }
+
+  // Precompute samples table
+  var sampleValues = float32ArraySupported ? new Float32Array(kSplineTableSize) : new Array(kSplineTableSize);
+  if (mX1 !== mY1 || mX2 !== mY2) {
+    for (var i = 0; i < kSplineTableSize; ++i) {
+      sampleValues[i] = calcBezier(i * kSampleStepSize, mX1, mX2);
+    }
+  }
+
+  function getTForX (aX) {
+    var intervalStart = 0.0;
+    var currentSample = 1;
+    var lastSample = kSplineTableSize - 1;
+
+    for (; currentSample !== lastSample && sampleValues[currentSample] <= aX; ++currentSample) {
+      intervalStart += kSampleStepSize;
+    }
+    --currentSample;
+
+    // Interpolate to provide an initial guess for t
+    var dist = (aX - sampleValues[currentSample]) / (sampleValues[currentSample + 1] - sampleValues[currentSample]);
+    var guessForT = intervalStart + dist * kSampleStepSize;
+
+    var initialSlope = getSlope(guessForT, mX1, mX2);
+    if (initialSlope >= NEWTON_MIN_SLOPE) {
+      return newtonRaphsonIterate(aX, guessForT, mX1, mX2);
+    } else if (initialSlope === 0.0) {
+      return guessForT;
+    } else {
+      return binarySubdivide(aX, intervalStart, intervalStart + kSampleStepSize, mX1, mX2);
+    }
+  }
+
+  return function BezierEasing (x) {
+    if (mX1 === mY1 && mX2 === mY2) {
+      return x; // linear
+    }
+    // Because JavaScript number are imprecise, we should guarantee the extremes are right.
+    if (x === 0) {
+      return 0;
+    }
+    if (x === 1) {
+      return 1;
+    }
+    return calcBezier(getTForX(x), mY1, mY2);
+  };
+};
+
+},{}],6:[function(require,module,exports){
 module.exports = function(subject) {
   validateSubject(subject);
 
@@ -580,7 +908,7 @@ function validateSubject(subject) {
   }
 }
 
-},{}],5:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 // File:src/Three.js
 
 /**
@@ -42343,7 +42671,7 @@ THREE.MorphBlendMesh.prototype.update = function ( delta ) {
 };
 
 
-},{}],6:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 /**
  * This module unifies handling of mouse whee event across different browsers
  *
