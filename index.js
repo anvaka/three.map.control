@@ -79,9 +79,9 @@ function panzoom(camera, owner) {
       x = 1 // left
     } else if (e.keyCode === 39) {
       x = -1 // right
-    } else if (e.keyCode === 189) {
+    } else if (e.keyCode === 189 || e.keyCode === 109) { // DASH or SUBTRACT
       z = 1 // `-` -  zoom out
-    } else if (e.keyCode === 187) {
+    } else if (e.keyCode === 187 || e.keyCode === 107) { // EQUAL SIGN or ADD
       z = -1 // `=` - zoom in (equal sign on US layout is under `+`)
     }
     // TODO: Keypad keycodes are missing.
