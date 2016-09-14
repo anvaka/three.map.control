@@ -98,8 +98,8 @@ function panzoom(camera, owner) {
   }
 
   function getPinchZoomLength(finger1, finger2) {
-    return (finger1.clientX - finger2.clientX) * (finger1.clientX - finger2.clientX) +
-      (finger1.clientY - finger2.clientY) * (finger1.clientY - finger2.clientY)
+    return (finger1.offsetX - finger2.offsetX) * (finger1.offsetX - finger2.offsetX) +
+      (finger1.offsetY - finger2.offsetY) * (finger1.offsetY - finger2.offsetY)
   }
 
   function handleTouch(e) {
@@ -124,7 +124,7 @@ function panzoom(camera, owner) {
 
     smoothScroll.cancel();
 
-    smoothZoom(tap.clientX, tap.clientY, -1);
+    smoothZoom(tap.offsetX, tap.offsetY, -1);
   }
 
   function smoothPanByOffset(x, y) {
@@ -166,8 +166,8 @@ function panzoom(camera, owner) {
       e.stopPropagation()
       var touch = e.touches[0]
 
-      var dx = touch.clientX - mousePos.x
-      var dy = touch.clientY - mousePos.y
+      var dx = touch.offsetX - mousePos.x
+      var dy = touch.offsetY - mousePos.y
 
       setMousePos(touch)
 
@@ -201,8 +201,8 @@ function panzoom(camera, owner) {
   function setMousePosFromTwoTouches(e) {
     var t1 = e.touches[0]
     var t2 = e.touches[1]
-    mousePos.x = (t1.clientX + t2.clientX)/2
-    mousePos.y = (t1.clientY + t2.clientY)/2
+    mousePos.x = (t1.offsetX + t2.offsetX)/2
+    mousePos.y = (t1.offsetY + t2.offsetY)/2
   }
 
   function handleTouchEnd(e) {
@@ -248,8 +248,8 @@ function panzoom(camera, owner) {
   }
 
   function setMousePos(e) {
-    mousePos.x = e.clientX
-    mousePos.y = e.clientY
+    mousePos.x = e.offsetX
+    mousePos.y = e.offsetY
   }
 
   function handleMouseMove(e) {
@@ -257,8 +257,8 @@ function panzoom(camera, owner) {
 
     triggerPanStart()
 
-    var dx = e.clientX - mousePos.x
-    var dy = e.clientY - mousePos.y
+    var dx = e.offsetX - mousePos.x
+    var dy = e.offsetY - mousePos.y
 
     panByOffset(dx, dy)
 
@@ -313,14 +313,14 @@ function panzoom(camera, owner) {
     var scaleMultiplier = getScaleMultiplier(e.deltaY)
 
     smoothScroll.cancel()
-    zoomTo(e.clientX, e.clientY, scaleMultiplier)
+    zoomTo(e.offsetX, e.offsetY, scaleMultiplier)
   }
 
-  function zoomTo(clientX, clientY, scaleMultiplier) {
+  function zoomTo(offsetX, offsetY, scaleMultiplier) {
     var currentScale = getCurrentScale()
 
-    var dx = (clientX - owner.clientWidth / 2) / currentScale
-    var dy = (clientY - owner.clientHeight / 2) / currentScale
+    var dx = (offsetX - owner.clientWidth / 2) / currentScale
+    var dy = (offsetY - owner.clientHeight / 2) / currentScale
 
     var newZ = camera.position.z * scaleMultiplier
     if (newZ < api.min || newZ > api.max) {
