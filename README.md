@@ -39,7 +39,11 @@ panZoom.dispose();
 
 ## events
 
-``` js
+A list of supported events:
+`panstart`, `panning`, `panend`
+`zoomstart`, `zoomend`
+
+ js
 // the panZoom api fires events when something happens,
 // so that you can react to user actions:
 panZoom.on('panstart', function() {
@@ -52,17 +56,22 @@ panZoom.on('panend', function() {
   console.log('panend fired');
 });
 
-panZoom.on('beforepan', function(panPayload) {
+panZoom.on('panning', function(panPayload) {
   // fired when camera position will be changed.
   console.log('going to move camera.position.x by: ' + panPayload.dx);
   console.log('going to move camera.position.y by: ' + panPayload.dy);
 });
 
-panZoom.on('beforezoom', function(panPayload) {
-  // fired when befor zoom in/zoom out
+panZoom.on('zoomstart', function(panPayload) {
+  // fired when before zoom in/zoom out
   console.log('going to move camera.position.x by: ' + panPayload.dx);
   console.log('going to move camera.position.y by: ' + panPayload.dy);
   console.log('going to move camera.position.z by: ' + panPayload.dz);
+});
+
+panZoom.on('zoomend', function(e) {
+  // fired when after zoom in/out
+  console.log(e); // where 'e' is the original event including `deltaX`, `deltaY` etc.
 });
 ```
 

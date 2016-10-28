@@ -25,6 +25,13 @@ function panzoom(camera, owner) {
   var touchInProgress = false
   var lastTouchTime = new Date(0)
   var smoothZoomAnimation, smoothPanAnimation;
+  var events = {
+    DRAG_START: 'panstart',
+    DRAG: 'panning',
+    DRAG_END: 'panend',
+    ZOOM_START: 'zoomstart',
+    ZOOM_END: 'zoomend'
+  }
   var panPayload = {
     dx: 0,
     dy: 0
@@ -169,7 +176,7 @@ function panzoom(camera, owner) {
   }
 
   function handleTouchMove(e) {
-    triggerPanStart()
+    triggerPanStart(e)
 
     if (e.touches.length === 1) {
       e.stopPropagation()
@@ -264,7 +271,7 @@ function panzoom(camera, owner) {
   function handleMouseMove(e) {
     if (!isDragging) return
 
-    triggerPanStart()
+    triggerPanStart(e)
 
     var dx = e.offsetX - mousePos.x
     var dy = e.offsetY - mousePos.y
@@ -274,9 +281,9 @@ function panzoom(camera, owner) {
     setMousePos(e)
   }
 
-  function triggerPanStart() {
+  function triggerPanStart(e) {
     if (!panstartFired) {
-      api.fire('panstart')
+      api.fire(events.DRAG_START, e);
       panstartFired = true
       smoothScroll.start()
     }
@@ -285,7 +292,7 @@ function panzoom(camera, owner) {
   function triggerPanEnd() {
     if (panstartFired) {
       smoothScroll.stop()
-      api.fire('panend')
+      api.fire(events.DRAG_END)
       panstartFired = false
     }
   }
@@ -315,7 +322,7 @@ function panzoom(camera, owner) {
     panPayload.dy = dy/currentScale
 
     // we fire first, so that clients can manipulate the payload
-    api.fire('beforepan', panPayload)
+    api.fire(events.DRAG, panPayload)
 
     camera.position.x += panPayload.dx
     camera.position.y += panPayload.dy
@@ -329,6 +336,7 @@ function panzoom(camera, owner) {
 
     smoothScroll.cancel()
     zoomTo(e.offsetX, e.offsetY, scaleMultiplier)
+    api.fire(events.ZOOM_END, e);
   }
 
   function zoomTo(offsetX, offsetY, scaleMultiplier) {
@@ -346,7 +354,7 @@ function panzoom(camera, owner) {
     zoomPayload.dx = -(scaleMultiplier - 1) * dx
     zoomPayload.dy = (scaleMultiplier - 1) * dy
 
-    api.fire('beforezoom', zoomPayload)
+    api.fire(events.ZOOM_START, zoomPayload)
 
     camera.position.z += zoomPayload.dz
     camera.position.x -= (scaleMultiplier - 1) * dx
