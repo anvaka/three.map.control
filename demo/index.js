@@ -26,21 +26,26 @@ panZoom.on('panstart', function() {
 });
 
 panZoom.on('panend', function() {
-  // fired when user stpos panning (dragging) the surface
+  // fired when user stops panning (dragging) the surface
   console.log('panend fired');
 });
 
-panZoom.on('beforepan', function(panPayload) {
+panZoom.on('panning', function(panPayload) {
   // fired when camera position will be changed.
-  console.log('going to move camera.position.x by: ' + panPayload.dx);
-  console.log('going to move camera.position.y by: ' + panPayload.dy);
+  console.log('panning: going to move camera.position.x by: ' + panPayload.dx);
+  console.log('panning: going to move camera.position.y by: ' + panPayload.dy);
 });
 
-panZoom.on('beforezoom', function(panPayload) {
-  // fired when befor zoom in/zoom out
-  console.log('going to move camera.position.x by: ' + panPayload.dx);
-  console.log('going to move camera.position.y by: ' + panPayload.dy);
-  console.log('going to move camera.position.z by: ' + panPayload.dz);
+panZoom.on('zoomstart', function(panPayload) {
+  // fired before zoom in/zoom out
+  console.log('zoomstart: going to move camera.position.x by: ' + panPayload.dx);
+  console.log('zoomstart: going to move camera.position.y by: ' + panPayload.dy);
+  console.log('zoomstart: going to move camera.position.z by: ' + panPayload.dz);
+});
+
+panZoom.on('zoomend', function(e) {
+  // fired after zoom in/zoom out
+  console.log('zoomend', e);
 });
 
 // The rest of the code is just standard three.js demo from http://threejs.org/examples/webgl_shader2.html
@@ -139,4 +144,3 @@ function render() {
 
   renderer.render( scene, camera );
 }
-
