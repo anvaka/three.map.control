@@ -17,6 +17,33 @@ container.focus();
 // When you dispose the three.js scene, don't forget to call:
 // panZoom.dispose();
 
+// # EVENTS SUPPORT
+
+// the panZoom api fires events when something happens,
+// so that you can react to user actions:
+panZoom.on('panstart', function() {
+  // fired when users begins panning (dragging) the surface
+  console.log('panstart fired');
+});
+
+panZoom.on('panend', function() {
+  // fired when user stpos panning (dragging) the surface
+  console.log('panend fired');
+});
+
+panZoom.on('beforepan', function(panPayload) {
+  // fired when camera position will be changed.
+  console.log('going to move camera.position.x by: ' + panPayload.dx);
+  console.log('going to move camera.position.y by: ' + panPayload.dy);
+});
+
+panZoom.on('beforezoom', function(panPayload) {
+  // fired when befor zoom in/zoom out
+  console.log('going to move camera.position.x by: ' + panPayload.dx);
+  console.log('going to move camera.position.y by: ' + panPayload.dy);
+  console.log('going to move camera.position.z by: ' + panPayload.dz);
+});
+
 // The rest of the code is just standard three.js demo from http://threejs.org/examples/webgl_shader2.html
 var scene, renderer;
 
@@ -143,6 +170,15 @@ function panzoom(camera, owner) {
   var touchInProgress = false
   var lastTouchTime = new Date(0)
   var smoothZoomAnimation, smoothPanAnimation;
+  var panPayload = {
+    dx: 0,
+    dy: 0
+  }
+  var zoomPayload = {
+    dx: 0,
+    dy: 0,
+    dz: 0
+  }
 
   var lastPinchZoomLength
 
@@ -420,8 +456,14 @@ function panzoom(camera, owner) {
   function panByOffset(dx, dy) {
     var currentScale = getCurrentScale()
 
-    camera.position.x -= dx/currentScale
-    camera.position.y += dy/currentScale
+    panPayload.dx = -dx/currentScale
+    panPayload.dy = dy/currentScale
+
+    // we fire first, so that clients can manipulate the payload
+    api.fire('beforepan', panPayload)
+
+    camera.position.x += panPayload.dx
+    camera.position.y += panPayload.dy
 
     api.fire('change')
   }
@@ -445,7 +487,13 @@ function panzoom(camera, owner) {
       return
     }
 
-    camera.position.z = newZ
+    zoomPayload.dz = newZ - camera.position.z
+    zoomPayload.dx = -(scaleMultiplier - 1) * dx
+    zoomPayload.dy = (scaleMultiplier - 1) * dy
+
+    api.fire('beforezoom', zoomPayload)
+
+    camera.position.z += zoomPayload.dz
     camera.position.x -= (scaleMultiplier - 1) * dx
     camera.position.y += (scaleMultiplier - 1) * dy
 
