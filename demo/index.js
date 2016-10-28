@@ -16,6 +16,33 @@ container.focus();
 // When you dispose the three.js scene, don't forget to call:
 // panZoom.dispose();
 
+// # EVENTS SUPPORT
+
+// the panZoom api fires events when something happens,
+// so that you can react to user actions:
+panZoom.on('panstart', function() {
+  // fired when users begins panning (dragging) the surface
+  console.log('panstart fired');
+});
+
+panZoom.on('panend', function() {
+  // fired when user stpos panning (dragging) the surface
+  console.log('panend fired');
+});
+
+panZoom.on('beforepan', function(panPayload) {
+  // fired when camera position will be changed.
+  console.log('going to move camera.position.x by: ' + panPayload.dx);
+  console.log('going to move camera.position.y by: ' + panPayload.dy);
+});
+
+panZoom.on('beforezoom', function(panPayload) {
+  // fired when befor zoom in/zoom out
+  console.log('going to move camera.position.x by: ' + panPayload.dx);
+  console.log('going to move camera.position.y by: ' + panPayload.dy);
+  console.log('going to move camera.position.z by: ' + panPayload.dz);
+});
+
 // The rest of the code is just standard three.js demo from http://threejs.org/examples/webgl_shader2.html
 var scene, renderer;
 

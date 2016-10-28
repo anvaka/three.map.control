@@ -25,6 +25,15 @@ function panzoom(camera, owner) {
   var touchInProgress = false
   var lastTouchTime = new Date(0)
   var smoothZoomAnimation, smoothPanAnimation;
+  var panPayload = {
+    dx: 0,
+    dy: 0
+  }
+  var zoomPayload = {
+    dx: 0,
+    dy: 0,
+    dz: 0
+  }
 
   var lastPinchZoomLength
 
@@ -302,8 +311,14 @@ function panzoom(camera, owner) {
   function panByOffset(dx, dy) {
     var currentScale = getCurrentScale()
 
-    camera.position.x -= dx/currentScale
-    camera.position.y += dy/currentScale
+    panPayload.dx = -dx/currentScale
+    panPayload.dy = dy/currentScale
+
+    // we fire first, so that clients can manipulate the payload
+    api.fire('beforepan', panPayload)
+
+    camera.position.x += panPayload.dx
+    camera.position.y += panPayload.dy
 
     api.fire('change')
   }
@@ -327,7 +342,13 @@ function panzoom(camera, owner) {
       return
     }
 
-    camera.position.z = newZ
+    zoomPayload.dz = newZ - camera.position.z
+    zoomPayload.dx = -(scaleMultiplier - 1) * dx
+    zoomPayload.dy = (scaleMultiplier - 1) * dy
+
+    api.fire('beforezoom', zoomPayload)
+
+    camera.position.z += zoomPayload.dz
     camera.position.x -= (scaleMultiplier - 1) * dx
     camera.position.y += (scaleMultiplier - 1) * dy
 
