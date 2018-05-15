@@ -1,4 +1,4 @@
-(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+(function(){function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s}return e})()({1:[function(require,module,exports){
 var THREE = require('three');
 
 var container = document.getElementById('container');
@@ -252,8 +252,8 @@ function panzoom(camera, owner) {
   }
 
   function getPinchZoomLength(finger1, finger2) {
-    return (finger1.offsetX - finger2.offsetX) * (finger1.offsetX - finger2.offsetX) +
-      (finger1.offsetY - finger2.offsetY) * (finger1.offsetY - finger2.offsetY)
+    return (finger1.clientX - finger2.clientX) * (finger1.clientX - finger2.clientX) +
+      (finger1.clientY - finger2.clientY) * (finger1.clientY - finger2.clientY)
   }
 
   function handleTouch(e) {
@@ -278,7 +278,7 @@ function panzoom(camera, owner) {
 
     smoothScroll.cancel();
 
-    smoothZoom(tap.offsetX, tap.offsetY, -1);
+    smoothZoom(tap.clientX, tap.clientY, -1);
   }
 
   function smoothPanByOffset(x, y) {
@@ -320,8 +320,8 @@ function panzoom(camera, owner) {
       e.stopPropagation()
       var touch = e.touches[0]
 
-      var dx = touch.offsetX - mousePos.x
-      var dy = touch.offsetY - mousePos.y
+      var dx = touch.clientX - mousePos.x
+      var dy = touch.clientY - mousePos.y
 
       setMousePos(touch)
 
@@ -355,8 +355,8 @@ function panzoom(camera, owner) {
   function setMousePosFromTwoTouches(e) {
     var t1 = e.touches[0]
     var t2 = e.touches[1]
-    mousePos.x = (t1.offsetX + t2.offsetX)/2
-    mousePos.y = (t1.offsetY + t2.offsetY)/2
+    mousePos.x = (t1.clientX + t2.clientX)/2
+    mousePos.y = (t1.clientY + t2.clientY)/2
   }
 
   function handleTouchEnd(e) {
@@ -402,8 +402,8 @@ function panzoom(camera, owner) {
   }
 
   function setMousePos(e) {
-    mousePos.x = e.offsetX
-    mousePos.y = e.offsetY
+    mousePos.x = e.clientX
+    mousePos.y = e.clientY
   }
 
   function handleMouseMove(e) {
@@ -411,8 +411,8 @@ function panzoom(camera, owner) {
 
     triggerPanStart()
 
-    var dx = e.offsetX - mousePos.x
-    var dy = e.offsetY - mousePos.y
+    var dx = e.clientX - mousePos.x
+    var dy = e.clientY - mousePos.y
 
     panByOffset(dx, dy)
 
@@ -473,7 +473,7 @@ function panzoom(camera, owner) {
     var scaleMultiplier = getScaleMultiplier(e.deltaY)
 
     smoothScroll.cancel()
-    zoomTo(e.offsetX, e.offsetY, scaleMultiplier)
+    zoomTo(e.clientX, e.clientY, scaleMultiplier)
   }
 
   function zoomTo(offsetX, offsetY, scaleMultiplier) {
@@ -666,9 +666,12 @@ var animations = {
 
 
 module.exports = animate;
+module.exports.makeAggregateRaf = makeAggregateRaf;
+module.exports.sharedScheduler = makeAggregateRaf();
+
 
 function animate(source, target, options) {
-  var start= Object.create(null)
+  var start = Object.create(null)
   var diff = Object.create(null)
   options = options || {}
   // We let clients specify their own easing function
@@ -693,7 +696,7 @@ function animate(source, target, options) {
     diff[key] = target[key] - source[key]
   })
 
-  var durationInMs = options.duration || 400
+  var durationInMs = typeof options.duration === 'number' ? options.duration : 400
   var durationInFrames = Math.max(1, durationInMs * 0.06) // 0.06 because 60 frames pers 1,000 ms
   var previousAnimationId
   var frame = 0
@@ -757,6 +760,51 @@ function timeoutScheduler() {
     cancel: function (id) {
       return clearTimeout(id)
     }
+  }
+}
+
+function makeAggregateRaf() {
+  var frontBuffer = new Set();
+  var backBuffer = new Set();
+  var frameToken = 0;
+
+  return {
+    next: next,
+    cancel: next,
+    clearAll: clearAll
+  }
+
+  function clearAll() {
+    frontBuffer.clear();
+    backBuffer.clear();
+    cancelAnimationFrame(frameToken);
+    frameToken = 0;
+  }
+
+  function next(callback) {
+    backBuffer.add(callback);
+    renderNextFrame();
+  }
+
+  function renderNextFrame() {
+    if (!frameToken) frameToken = requestAnimationFrame(renderFrame);
+  }
+
+  function renderFrame() {
+    frameToken = 0;
+
+    var t = backBuffer;
+    backBuffer = frontBuffer;
+    frontBuffer = t;
+
+    frontBuffer.forEach(function(callback) {
+      callback();
+    });
+    frontBuffer.clear();
+  }
+
+  function cancel(callback) {
+    backBuffer.delete(callback);
   }
 }
 
